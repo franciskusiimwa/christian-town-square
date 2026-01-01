@@ -2,15 +2,14 @@ import { Link } from "react-router-dom";
 import { MessageCircle, Eye } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Question } from "@/lib/mockData";
 import { formatDistanceToNow } from "date-fns";
 
 interface QuestionCardProps {
-  question: Question;
+  question: any;
 }
 
 export function QuestionCard({ question }: QuestionCardProps) {
-  const timeAgo = formatDistanceToNow(question.createdAt, { addSuffix: true });
+  const timeAgo = formatDistanceToNow(new Date(question.created_at || question.createdAt), { addSuffix: true });
 
   return (
     <Card className="group">
@@ -29,22 +28,27 @@ export function QuestionCard({ question }: QuestionCardProps) {
         </Link>
       </CardHeader>
       <CardContent>
-        <p className="text-muted-foreground text-sm line-clamp-2 mb-4">
-          {question.details}
-        </p>
+        {question.details && (
+          <p className="text-muted-foreground text-sm line-clamp-2 mb-4">
+            {question.details}
+          </p>
+        )}
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1">
+            <Link
+              to={`/question/${question.id}#answers`}
+              className="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer"
+            >
               <MessageCircle className="h-4 w-4" />
-              {question.answerCount} answers
-            </span>
+              {question.answer_count || question.answerCount || 0} answers
+            </Link>
             <span className="flex items-center gap-1">
               <Eye className="h-4 w-4" />
-              {question.viewCount}
+              {question.view_count || question.viewCount || 0}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span>{question.isAnonymous ? "Anonymous" : question.author}</span>
+            <span>{(question.is_anonymous || question.isAnonymous) ? "Anonymous" : (question.author_name || question.author)}</span>
             <span>·</span>
             <span>{timeAgo}</span>
           </div>

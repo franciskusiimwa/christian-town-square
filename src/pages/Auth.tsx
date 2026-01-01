@@ -3,14 +3,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Mail, Lock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 
 const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, signIn, signUp } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   // Sign In form state
@@ -22,34 +24,55 @@ const Auth = () => {
   const [signUpEmail, setSignUpEmail] = useState("");
   const [signUpPassword, setSignUpPassword] = useState("");
 
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate("/");
+    }
+  }, [user, navigate]);
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      await signIn(signInEmail, signInPassword);
       toast({
         title: "Welcome back!",
         description: "You have successfully signed in.",
       });
-      setIsLoading(false);
       navigate("/");
-    }, 1000);
+    } catch (error: any) {
+      toast({
+        title: "Sign in failed",
+        description: error.message || "Invalid email or password.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      await signUp(signUpEmail, signUpPassword, signUpName);
       toast({
         title: "Account created!",
-        description: "Welcome to Christian Town Square.",
+        description: "Welcome to Christian Town Square. Please check your email to verify your account.",
       });
-      setIsLoading(false);
       navigate("/");
-    }, 1000);
+    } catch (error: any) {
+      toast({
+        title: "Sign up failed",
+        description: error.message || "Could not create account.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

@@ -6,18 +6,43 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { topics } from "@/lib/mockData";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, X, Info } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
 
 const AskQuestion = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [details, setDetails] = useState("");
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [username, setUsername] = useState("");
+  const [guestName, setGuestName] = useState("");
+
+  useEffect(() => {
+    // Fetch username if user is logged in
+    if (user) {
+      const fetchProfile = async () => {
+        const { data } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("id", user.id)
+          .single();
+
+        if (data) {
+          setUsername(data.username);
+        }
+      };
+
+      fetchProfile();
+    }
+  }, [user]);
 
   const toggleTopic = (topicName: string) => {
     if (selectedTopics.includes(topicName)) {
@@ -33,7 +58,7 @@ const AskQuestion = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!title.trim()) {
@@ -54,13 +79,55 @@ const AskQuestion = () => {
       return;
     }
 
-    // In a real app, this would submit to the backend
-    toast({
-      title: "Question submitted!",
-      description: "Your question has been posted successfully.",
-    });
+    // For guests, require a name unless posting anonymously
+    if (!user && !guestName.trim() && !isAnonymous) {
+      toast({
+        title: "Name required",
+        description: "Please enter your name or post anonymously.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    navigate("/");
+    setIsSubmitting(true);
+
+    try {
+      const displayName = isAnonymous
+        ? "Anonymous"
+        : user
+          ? username || "User"
+          : guestName.trim() || "Guest";
+
+      const { data, error } = await supabase
+        .from("questions")
+        .insert({
+          title: title.trim(),
+          details: details.trim() || null,
+          author_id: user?.id || null,
+          author_name: displayName,
+          is_anonymous: isAnonymous,
+          topics: selectedTopics,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({
+        title: "Question submitted!",
+        description: "Your question has been posted successfully.",
+      });
+
+      navigate(`/question/${data.id}`);
+    } catch (error: any) {
+      toast({
+        title: "Failed to submit question",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -84,6 +151,27 @@ const AskQuestion = () => {
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Guest Name Field (only if not logged in) */}
+            {!user && (
+              <div className="space-y-2">
+                <Label htmlFor="guestName" className="text-base font-medium">
+                  Your Name {!isAnonymous && <span className="text-destructive">*</span>}
+                </Label>
+                <Input
+                  id="guestName"
+                  placeholder="Enter your name"
+                  value={guestName}
+                  onChange={(e) => setGuestName(e.target.value)}
+                  className="text-base"
+                  disabled={isAnonymous}
+                />
+                <p className="text-sm text-muted-foreground">
+                  {isAnonymous ? "Posting anonymously" : "Your name will be shown with your question"}
+                  {!isAnonymous && ". To avoid entering a name, enable 'Post anonymously' below."}
+                </p>
+              </div>
+            )}
+
             {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="title" className="text-base font-medium">
@@ -154,8 +242,9 @@ const AskQuestion = () => {
                     Post anonymously
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Your username won't be displayed, but you can still manage your
-                    question.
+                    {user
+                      ? "Your username won't be displayed, but you can still manage your question."
+                      : "Your name won't be displayed. You can post without providing a name."}
                   </p>
                 </div>
               </div>
@@ -171,8 +260,8 @@ const AskQuestion = () => {
               <Button variant="outline" type="button" asChild>
                 <Link to="/">Cancel</Link>
               </Button>
-              <Button variant="hero" type="submit" size="lg">
-                Post Question
+              <Button variant="hero" type="submit" size="lg" disabled={isSubmitting}>
+                {isSubmitting ? "Posting..." : "Post Question"}
               </Button>
             </div>
           </form>

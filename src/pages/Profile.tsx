@@ -3,23 +3,111 @@ import { QuestionCard } from "@/components/questions/QuestionCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { questions, answers } from "@/lib/mockData";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { User, Edit, MessageCircle, HelpCircle, Star } from "lucide-react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
 
 const Profile = () => {
-  // Mock user data
-  const user = {
-    username: "Sarah Mitchell",
-    bio: "Theologian and author. Passionate about making complex ideas accessible.",
-    reputation: 127,
-    joinedAt: new Date("2024-06-15"),
-    questionsCount: 3,
-    answersCount: 12,
+  const { user: authUser } = useAuth();
+  const navigate = useNavigate();
+  const [profile, setProfile] = useState<any>(null);
+  const [userQuestions, setUserQuestions] = useState<any[]>([]);
+  const [userAnswers, setUserAnswers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!authUser) {
+      navigate("/auth");
+      return;
+    }
+    fetchProfileData();
+  }, [authUser, navigate]);
+
+  const fetchProfileData = async () => {
+    if (!authUser) return;
+
+    try {
+      // Fetch profile
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", authUser.id)
+        .single();
+
+      setProfile(profileData);
+
+      // Fetch user's questions
+      const { data: questionsData, error: questionsError } = await supabase
+        .from("questions")
+        .select("*")
+        .eq("author_id", authUser.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (!questionsError) {
+        // Get real-time counts for each question
+        const questionsWithCounts = await Promise.all(
+          (questionsData || []).map(async (question) => {
+            const { count: answerCount } = await supabase
+              .from("answers")
+              .select("*", { count: "exact", head: true })
+              .eq("question_id", question.id)
+              .eq("status", "active");
+
+            const { count: viewCount } = await supabase
+              .from("question_views")
+              .select("*", { count: "exact", head: true })
+              .eq("question_id", question.id);
+
+            return {
+              ...question,
+              answer_count: answerCount || 0,
+              view_count: viewCount || 0,
+            };
+          })
+        );
+        setUserQuestions(questionsWithCounts);
+      }
+
+      // Fetch user's answers
+      const { data: answersData, error: answersError } = await supabase
+        .from("answers")
+        .select("*")
+        .eq("author_id", authUser.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (!answersError) {
+        setUserAnswers(answersData || []);
+      }
+    } catch (error) {
+      console.error("Error fetching profile data:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const userQuestions = questions.slice(0, 3);
-  const userAnswers = answers.filter((a) => a.author === "Dr. Sarah Mitchell");
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="container-page py-12 text-center">
+          <p className="text-muted-foreground">Loading profile...</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <Layout>
+        <div className="container-page py-12 text-center">
+          <p className="text-muted-foreground">Profile not found</p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -35,11 +123,11 @@ const Profile = () => {
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <h1 className="font-serif text-2xl font-semibold">
-                    {user.username}
+                    {profile.username}
                   </h1>
                   <p className="text-muted-foreground">
                     Member since{" "}
-                    {user.joinedAt.toLocaleDateString("en-US", {
+                    {new Date(profile.created_at).toLocaleDateString("en-US", {
                       month: "long",
                       year: "numeric",
                     })}
@@ -51,22 +139,14 @@ const Profile = () => {
                 </Button>
               </div>
 
-              {user.bio && (
-                <p className="text-muted-foreground mt-4">{user.bio}</p>
-              )}
-
               <div className="flex flex-wrap gap-4 mt-6">
-                <Badge variant="gold" className="px-4 py-2 text-sm gap-2">
-                  <Star className="h-4 w-4" />
-                  {user.reputation} reputation
-                </Badge>
                 <Badge variant="secondary" className="px-4 py-2 text-sm gap-2">
                   <HelpCircle className="h-4 w-4" />
-                  {user.questionsCount} questions
+                  {userQuestions.length} questions
                 </Badge>
                 <Badge variant="secondary" className="px-4 py-2 text-sm gap-2">
                   <MessageCircle className="h-4 w-4" />
-                  {user.answersCount} answers
+                  {userAnswers.length} answers
                 </Badge>
               </div>
             </div>
@@ -115,7 +195,7 @@ const Profile = () => {
                   className="bg-card border rounded-lg p-6 hover:shadow-md transition-shadow"
                 >
                   <Link
-                    to={`/question/${answer.questionId}`}
+                    to={`/question/${answer.question_id}`}
                     className="text-sm text-muted-foreground hover:text-primary mb-2 block"
                   >
                     View question →
@@ -124,11 +204,16 @@ const Profile = () => {
                   <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Star className="h-4 w-4" />
-                      {answer.votes} votes
+                      {answer.votes || 0} votes
                     </span>
-                    {answer.isVerified && (
+                    {answer.is_verified && (
                       <Badge variant="success" className="gap-1">
                         Verified
+                      </Badge>
+                    )}
+                    {answer.is_pinned && (
+                      <Badge variant="verified" className="gap-1">
+                        Best Answer
                       </Badge>
                     )}
                   </div>

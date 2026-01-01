@@ -1,19 +1,87 @@
-import { ChevronUp, CheckCircle, BookOpen, Flag } from "lucide-react";
+import { ChevronUp, CheckCircle, BookOpen, Flag, MessageCircle, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Answer } from "@/lib/mockData";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatDistanceToNow } from "date-fns";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/hooks/use-toast";
 
 interface AnswerCardProps {
-  answer: Answer;
+  answer: any;
+}
+
+interface Reply {
+  id: string;
+  answer_id: string;
+  author_id: string | null;
+  author_name: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export function AnswerCard({ answer }: AnswerCardProps) {
-  const [votes, setVotes] = useState(answer.votes);
+  const [votes, setVotes] = useState(answer.votes || 0);
   const [hasVoted, setHasVoted] = useState(false);
-  const timeAgo = formatDistanceToNow(answer.createdAt, { addSuffix: true });
+  const [showReplyForm, setShowReplyForm] = useState(false);
+  const [showReplies, setShowReplies] = useState(false);
+  const [replies, setReplies] = useState<Reply[]>([]);
+  const [replyText, setReplyText] = useState("");
+  const [guestName, setGuestName] = useState("");
+  const [username, setUsername] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { user } = useAuth();
+  const { toast } = useToast();
+
+  const timeAgo = formatDistanceToNow(new Date(answer.created_at || answer.createdAt), { addSuffix: true });
+  const isPinned = answer.is_pinned || answer.isPinned;
+  const isVerified = answer.is_verified || answer.isVerified;
+  const hasCitations = answer.has_citations || answer.hasCitations;
+  const authorName = answer.author_name || answer.author;
+
+  useEffect(() => {
+    fetchReplies();
+  }, [answer.id]);
+
+  useEffect(() => {
+    if (user) {
+      fetchUsername();
+    }
+  }, [user]);
+
+  const fetchUsername = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", user.id)
+      .single();
+    if (data) {
+      setUsername(data.username);
+    }
+  };
+
+  const fetchReplies = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("replies")
+        .select("*")
+        .eq("answer_id", answer.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+      setReplies(data || []);
+    } catch (error) {
+      console.error("Error fetching replies:", error);
+    }
+  };
 
   const handleVote = () => {
     if (!hasVoted) {
@@ -22,11 +90,67 @@ export function AnswerCard({ answer }: AnswerCardProps) {
     }
   };
 
+  const handleSubmitReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!replyText.trim()) {
+      toast({
+        title: "Reply required",
+        description: "Please enter your reply.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!user && !guestName.trim()) {
+      toast({
+        title: "Name required",
+        description: "Please enter your name to post a reply.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const displayName = user ? (username || "User") : (guestName.trim() || "Guest");
+
+      const { error } = await supabase.from("replies").insert({
+        answer_id: answer.id,
+        author_id: user?.id || null,
+        author_name: displayName,
+        body: replyText.trim(),
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Reply posted!",
+        description: "Your reply has been posted successfully.",
+      });
+
+      setReplyText("");
+      setGuestName("");
+      setShowReplyForm(false);
+      setShowReplies(true);
+      fetchReplies();
+    } catch (error: any) {
+      toast({
+        title: "Failed to post reply",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <article
       className={cn(
         "p-6 rounded-lg border bg-card transition-all",
-        answer.isPinned && "ring-2 ring-primary/20 bg-navy-soft"
+        isPinned && "ring-2 ring-primary/20 bg-navy-soft"
       )}
     >
       {/* Header */}
@@ -51,19 +175,19 @@ export function AnswerCard({ answer }: AnswerCardProps) {
         <div className="flex-1 min-w-0">
           {/* Badges */}
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            {answer.isPinned && (
+            {isPinned && (
               <Badge variant="verified" className="gap-1">
                 <CheckCircle className="h-3 w-3" />
                 Best Answer
               </Badge>
             )}
-            {answer.isVerified && (
+            {isVerified && (
               <Badge variant="success" className="gap-1">
                 <CheckCircle className="h-3 w-3" />
                 Verified
               </Badge>
             )}
-            {answer.hasCitations && (
+            {hasCitations && (
               <Badge variant="gold" className="gap-1">
                 <BookOpen className="h-3 w-3" />
                 Citations
@@ -85,18 +209,111 @@ export function AnswerCard({ answer }: AnswerCardProps) {
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
                 <span className="text-xs font-medium text-primary">
-                  {answer.author.charAt(0)}
+                  {authorName.charAt(0)}
                 </span>
               </div>
-              <span className="font-medium text-foreground">{answer.author}</span>
+              <span className="font-medium text-foreground">{authorName}</span>
               <span>·</span>
               <span>{timeAgo}</span>
             </div>
-            <Button variant="ghost" size="sm" className="text-muted-foreground">
-              <Flag className="h-4 w-4 mr-1" />
-              Report
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => setShowReplyForm(!showReplyForm)}
+              >
+                <MessageCircle className="h-4 w-4 mr-1" />
+                Reply
+              </Button>
+              <Button variant="ghost" size="sm" className="text-muted-foreground">
+                <Flag className="h-4 w-4 mr-1" />
+                Report
+              </Button>
+            </div>
           </div>
+
+          {/* Reply Form */}
+          {showReplyForm && (
+            <div className="mt-4 pl-4 border-l-2 border-primary/20">
+              <form onSubmit={handleSubmitReply} className="space-y-3">
+                {!user && (
+                  <div className="space-y-1">
+                    <Label htmlFor={`guestName-${answer.id}`} className="text-xs font-medium">
+                      Your Name <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id={`guestName-${answer.id}`}
+                      placeholder="Enter your name"
+                      value={guestName}
+                      onChange={(e) => setGuestName(e.target.value)}
+                      className="text-sm"
+                    />
+                  </div>
+                )}
+                <Textarea
+                  placeholder="Write your reply..."
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  className="min-h-[80px] text-sm"
+                />
+                <div className="flex gap-2">
+                  <Button type="submit" size="sm" disabled={isSubmitting}>
+                    <Send className="h-3 w-3 mr-1" />
+                    {isSubmitting ? "Posting..." : "Post Reply"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowReplyForm(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Replies Section */}
+          {replies.length > 0 && (
+            <div className="mt-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-sm text-muted-foreground hover:text-foreground mb-2"
+                onClick={() => setShowReplies(!showReplies)}
+              >
+                <MessageCircle className="h-4 w-4 mr-1" />
+                {showReplies ? "Hide" : "Show"} {replies.length} {replies.length === 1 ? "reply" : "replies"}
+              </Button>
+
+              {showReplies && (
+                <div className="space-y-3 pl-4 border-l-2 border-primary/20">
+                  {replies.map((reply) => {
+                    const replyTimeAgo = formatDistanceToNow(new Date(reply.created_at), { addSuffix: true });
+                    return (
+                      <div key={reply.id} className="bg-muted/30 rounded-lg p-4">
+                        <div className="text-sm text-foreground mb-2 whitespace-pre-wrap">
+                          {reply.body}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+                            <span className="text-xs font-medium text-primary">
+                              {reply.author_name.charAt(0)}
+                            </span>
+                          </div>
+                          <span className="font-medium text-foreground">{reply.author_name}</span>
+                          <span>·</span>
+                          <span>{replyTimeAgo}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </article>

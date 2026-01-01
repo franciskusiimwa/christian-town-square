@@ -1,19 +1,77 @@
 import { Layout } from "@/components/layout/Layout";
 import { QuestionCard } from "@/components/questions/QuestionCard";
-import { topics, questions } from "@/lib/mockData";
+import { topics } from "@/lib/mockData";
 import { useParams, Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft } from "lucide-react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 const Topics = () => {
   const { slug } = useParams();
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [topicCounts, setTopicCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    fetchAllQuestions();
+  }, []);
+
+  const fetchAllQuestions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("questions")
+        .select("*")
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // Get real-time counts for answers and views
+      const questionsWithCounts = await Promise.all(
+        (data || []).map(async (question) => {
+          const { count: answerCount } = await supabase
+            .from("answers")
+            .select("*", { count: "exact", head: true })
+            .eq("question_id", question.id)
+            .eq("status", "active");
+
+          const { count: viewCount } = await supabase
+            .from("question_views")
+            .select("*", { count: "exact", head: true })
+            .eq("question_id", question.id);
+
+          return {
+            ...question,
+            answer_count: answerCount || 0,
+            view_count: viewCount || 0,
+          };
+        })
+      );
+
+      setQuestions(questionsWithCounts);
+
+      // Calculate topic counts
+      const counts: Record<string, number> = {};
+      topics.forEach((topic) => {
+        counts[topic.name] = questionsWithCounts.filter((q) =>
+          q.topics.includes(topic.name)
+        ).length;
+      });
+      setTopicCounts(counts);
+    } catch (error) {
+      console.error("Error fetching questions:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // If a specific topic is selected
   if (slug) {
     const topic = topics.find((t) => t.slug === slug);
     const filteredQuestions = questions.filter((q) =>
       q.topics.some(
-        (t) => t.toLowerCase().replace(/ & /g, "-").replace(/ /g, "-") === slug
+        (t: string) => t.toLowerCase().replace(/ & /g, "-").replace(/ /g, "-") === slug
       )
     );
 
@@ -48,12 +106,16 @@ const Topics = () => {
               {topic.name}
             </h1>
             <p className="text-muted-foreground">
-              {filteredQuestions.length} questions in this topic
+              {isLoading ? "Loading..." : `${filteredQuestions.length} questions in this topic`}
             </p>
           </div>
 
           <div className="space-y-4">
-            {filteredQuestions.length > 0 ? (
+            {isLoading ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">Loading questions...</p>
+              </div>
+            ) : filteredQuestions.length > 0 ? (
               filteredQuestions.map((question) => (
                 <QuestionCard key={question.id} question={question} />
               ))
@@ -74,10 +136,6 @@ const Topics = () => {
   }
 
   // All topics view
-  const getQuestionCount = (topicName: string) => {
-    return questions.filter((q) => q.topics.includes(topicName)).length;
-  };
-
   return (
     <Layout>
       <div className="container-page py-8 md:py-12">
@@ -90,27 +148,33 @@ const Topics = () => {
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {topics.map((topic) => {
-            const count = getQuestionCount(topic.name);
-            return (
-              <Link
-                key={topic.id}
-                to={`/topics/${topic.slug}`}
-                className="group"
-              >
-                <div className="bg-card border rounded-lg p-6 hover:shadow-md hover:border-primary/30 transition-all">
-                  <h2 className="font-serif text-lg font-semibold mb-2 group-hover:text-primary transition-colors">
-                    {topic.name}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {count} {count === 1 ? "question" : "questions"}
-                  </p>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+        {isLoading ? (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">Loading topics...</p>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {topics.map((topic) => {
+              const count = topicCounts[topic.name] || 0;
+              return (
+                <Link
+                  key={topic.id}
+                  to={`/topics/${topic.slug}`}
+                  className="group"
+                >
+                  <div className="bg-card border rounded-lg p-6 hover:shadow-md hover:border-primary/30 transition-all">
+                    <h2 className="font-serif text-lg font-semibold mb-2 group-hover:text-primary transition-colors">
+                      {topic.name}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      {count} {count === 1 ? "question" : "questions"}
+                    </p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
     </Layout>
   );

@@ -3,20 +3,67 @@ import { QuestionCard } from "@/components/questions/QuestionCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { questions, topics } from "@/lib/mockData";
+import { topics } from "@/lib/mockData";
 import { useSearchParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Search as SearchIcon, X } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const Search = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
   const [query, setQuery] = useState(initialQuery);
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     setQuery(searchParams.get("q") || "");
   }, [searchParams]);
+
+  useEffect(() => {
+    fetchQuestions();
+  }, []);
+
+  const fetchQuestions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("questions")
+        .select("*")
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // Get real-time counts for answers and views
+      const questionsWithCounts = await Promise.all(
+        (data || []).map(async (question) => {
+          const { count: answerCount } = await supabase
+            .from("answers")
+            .select("*", { count: "exact", head: true })
+            .eq("question_id", question.id)
+            .eq("status", "active");
+
+          const { count: viewCount } = await supabase
+            .from("question_views")
+            .select("*", { count: "exact", head: true })
+            .eq("question_id", question.id);
+
+          return {
+            ...question,
+            answer_count: answerCount || 0,
+            view_count: viewCount || 0,
+          };
+        })
+      );
+
+      setQuestions(questionsWithCounts);
+    } catch (error) {
+      console.error("Error fetching questions:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +74,7 @@ const Search = () => {
     const matchesQuery =
       !query ||
       q.title.toLowerCase().includes(query.toLowerCase()) ||
-      q.details.toLowerCase().includes(query.toLowerCase());
+      (q.details && q.details.toLowerCase().includes(query.toLowerCase()));
 
     const matchesTopic =
       !selectedTopic || q.topics.includes(selectedTopic);
@@ -91,15 +138,21 @@ const Search = () => {
 
         {/* Results */}
         <div>
-          <p className="text-sm text-muted-foreground mb-6">
-            {filteredQuestions.length}{" "}
-            {filteredQuestions.length === 1 ? "result" : "results"}
-            {query && ` for "${query}"`}
-            {selectedTopic && ` in ${selectedTopic}`}
-          </p>
+          {!isLoading && (
+            <p className="text-sm text-muted-foreground mb-6">
+              {filteredQuestions.length}{" "}
+              {filteredQuestions.length === 1 ? "result" : "results"}
+              {query && ` for "${query}"`}
+              {selectedTopic && ` in ${selectedTopic}`}
+            </p>
+          )}
 
           <div className="space-y-4">
-            {filteredQuestions.length > 0 ? (
+            {isLoading ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">Loading questions...</p>
+              </div>
+            ) : filteredQuestions.length > 0 ? (
               filteredQuestions.map((question) => (
                 <QuestionCard key={question.id} question={question} />
               ))

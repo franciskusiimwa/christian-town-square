@@ -1,12 +1,26 @@
 import { Link } from "react-router-dom";
-import { Search, Menu, X } from "lucide-react";
+import { Search, Menu, X, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    window.location.href = "/";
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -55,12 +69,40 @@ export function Header() {
                 className="w-64 pl-10 h-10"
               />
             </form>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/auth">Sign In</Link>
-            </Button>
-            <Button variant="hero" size="sm" asChild>
-              <Link to="/ask">Ask a Question</Link>
-            </Button>
+            {user ? (
+              <>
+                <Button variant="hero" size="sm" asChild>
+                  <Link to="/ask">Ask a Question</Link>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm">
+                      <User className="h-4 w-4 mr-2" />
+                      Account
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile">Profile</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleSignOut}>
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/auth">Sign In</Link>
+                </Button>
+                <Button variant="hero" size="sm" asChild>
+                  <Link to="/ask">Ask a Question</Link>
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -110,18 +152,46 @@ export function Header() {
                 About
               </Link>
               <hr className="my-2" />
-              <Link
-                to="/auth"
-                className="px-3 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Sign In
-              </Link>
-              <Button variant="hero" size="sm" className="mt-2" asChild>
-                <Link to="/ask" onClick={() => setIsMenuOpen(false)}>
-                  Ask a Question
-                </Link>
-              </Button>
+              {user ? (
+                <>
+                  <Link
+                    to="/profile"
+                    className="px-3 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Profile
+                  </Link>
+                  <button
+                    onClick={() => {
+                      handleSignOut();
+                      setIsMenuOpen(false);
+                    }}
+                    className="px-3 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors text-left"
+                  >
+                    Sign Out
+                  </button>
+                  <Button variant="hero" size="sm" className="mt-2" asChild>
+                    <Link to="/ask" onClick={() => setIsMenuOpen(false)}>
+                      Ask a Question
+                    </Link>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/auth"
+                    className="px-3 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Sign In
+                  </Link>
+                  <Button variant="hero" size="sm" className="mt-2" asChild>
+                    <Link to="/ask" onClick={() => setIsMenuOpen(false)}>
+                      Ask a Question
+                    </Link>
+                  </Button>
+                </>
+              )}
             </nav>
           </div>
         )}

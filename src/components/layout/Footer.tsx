@@ -1,6 +1,10 @@
 import { Link } from "react-router-dom";
+import { Shield } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 
 export function Footer() {
+  const { isAdmin } = useAuth();
+
   return (
     <footer className="border-t bg-card mt-auto">
       <div className="container-wide py-8">
@@ -24,6 +28,16 @@ export function Footer() {
             <Link to="/privacy" className="hover:text-foreground transition-colors">
               Privacy Policy
             </Link>
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className="hover:text-foreground transition-colors flex items-center gap-1 text-primary"
+                title="Admin Dashboard"
+              >
+                <Shield className="h-4 w-4" />
+                Admin
+              </Link>
+            )}
           </nav>
         </div>
 

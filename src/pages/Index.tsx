@@ -3,14 +3,66 @@ import { QuestionCard } from "@/components/questions/QuestionCard";
 import { TopicChip } from "@/components/topics/TopicChip";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { questions, topics } from "@/lib/mockData";
+import { topics } from "@/lib/mockData";
 import { Link } from "react-router-dom";
 import { Sparkles, TrendingUp, Clock } from "lucide-react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 const Index = () => {
-  const trendingQuestions = [...questions].sort((a, b) => b.viewCount - a.viewCount);
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchQuestions();
+  }, []);
+
+  const fetchQuestions = async () => {
+    try {
+      // Fetch questions with real-time answer counts and view counts
+      const { data: questionsData, error: questionsError } = await supabase
+        .from("questions")
+        .select("*")
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (questionsError) throw questionsError;
+
+      // For each question, count answers and views in real-time
+      const questionsWithCounts = await Promise.all(
+        (questionsData || []).map(async (question) => {
+          // Count active answers
+          const { count: answerCount } = await supabase
+            .from("answers")
+            .select("*", { count: "exact", head: true })
+            .eq("question_id", question.id)
+            .eq("status", "active");
+
+          // Count unique views
+          const { count: viewCount } = await supabase
+            .from("question_views")
+            .select("*", { count: "exact", head: true })
+            .eq("question_id", question.id);
+
+          return {
+            ...question,
+            answer_count: answerCount || 0,
+            view_count: viewCount || 0,
+          };
+        })
+      );
+
+      setQuestions(questionsWithCounts);
+    } catch (error) {
+      console.error("Error fetching questions:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const trendingQuestions = [...questions].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
   const newestQuestions = [...questions].sort(
-    (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
   const popularTopics = topics.slice(0, 10);
 
