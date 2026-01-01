@@ -1,5 +1,6 @@
 import { Layout } from "@/components/layout/Layout";
 import { QuestionCard } from "@/components/questions/QuestionCard";
+import { SimplePagination } from "@/components/ui/simple-pagination";
 import { topics } from "@/lib/mockData";
 import { useParams, Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,8 @@ const Topics = () => {
   const [questions, setQuestions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [topicCounts, setTopicCounts] = useState<Record<string, number>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const questionsPerPage = 10;
 
   useEffect(() => {
     fetchAllQuestions();
@@ -75,6 +78,13 @@ const Topics = () => {
       )
     );
 
+    // Pagination for filtered questions
+    const totalPages = Math.ceil(filteredQuestions.length / questionsPerPage);
+    const paginatedQuestions = filteredQuestions.slice(
+      (currentPage - 1) * questionsPerPage,
+      currentPage * questionsPerPage
+    );
+
     if (!topic) {
       return (
         <Layout>
@@ -116,9 +126,19 @@ const Topics = () => {
                 <p className="text-muted-foreground">Loading questions...</p>
               </div>
             ) : filteredQuestions.length > 0 ? (
-              filteredQuestions.map((question) => (
-                <QuestionCard key={question.id} question={question} />
-              ))
+              <>
+                {paginatedQuestions.map((question) => (
+                  <QuestionCard key={question.id} question={question} />
+                ))}
+                <SimplePagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={(page) => {
+                    setCurrentPage(page);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
+              </>
             ) : (
               <div className="text-center py-12 bg-muted rounded-lg">
                 <p className="text-muted-foreground mb-4">

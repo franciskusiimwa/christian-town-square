@@ -1,5 +1,6 @@
 import { Layout } from "@/components/layout/Layout";
 import { QuestionCard } from "@/components/questions/QuestionCard";
+import { SimplePagination } from "@/components/ui/simple-pagination";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,8 @@ const Search = () => {
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const questionsPerPage = 10;
 
   useEffect(() => {
     setQuery(searchParams.get("q") || "");
@@ -81,6 +84,13 @@ const Search = () => {
 
     return matchesQuery && matchesTopic;
   });
+
+  // Pagination
+  const totalPages = Math.ceil(filteredQuestions.length / questionsPerPage);
+  const paginatedQuestions = filteredQuestions.slice(
+    (currentPage - 1) * questionsPerPage,
+    currentPage * questionsPerPage
+  );
 
   return (
     <Layout>
@@ -153,9 +163,19 @@ const Search = () => {
                 <p className="text-muted-foreground">Loading questions...</p>
               </div>
             ) : filteredQuestions.length > 0 ? (
-              filteredQuestions.map((question) => (
-                <QuestionCard key={question.id} question={question} />
-              ))
+              <>
+                {paginatedQuestions.map((question) => (
+                  <QuestionCard key={question.id} question={question} />
+                ))}
+                <SimplePagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={(page) => {
+                    setCurrentPage(page);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
+              </>
             ) : (
               <div className="text-center py-12 bg-muted rounded-lg">
                 <SearchIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />

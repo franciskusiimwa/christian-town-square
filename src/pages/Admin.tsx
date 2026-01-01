@@ -3,11 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { SimplePagination } from "@/components/ui/simple-pagination";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Trash2, Pin, CheckCircle, Eye, MessageCircle, AlertTriangle } from "lucide-react";
+import { Trash2, Pin, CheckCircle, Eye, MessageCircle, AlertTriangle, Users, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -27,9 +28,16 @@ const Admin = () => {
   const { toast } = useToast();
   const [questions, setQuestions] = useState<any[]>([]);
   const [answers, setAnswers] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'question' | 'answer', id: string } | null>(null);
+
+  // Pagination
+  const [questionsPage, setQuestionsPage] = useState(1);
+  const [answersPage, setAnswersPage] = useState(1);
+  const [usersPage, setUsersPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     if (!authLoading) {
@@ -45,7 +53,7 @@ const Admin = () => {
 
   const fetchData = async () => {
     setIsLoading(true);
-    await Promise.all([fetchQuestions(), fetchAnswers()]);
+    await Promise.all([fetchQuestions(), fetchAnswers(), fetchUsers()]);
     setIsLoading(false);
   };
 
@@ -73,6 +81,51 @@ const Admin = () => {
       return;
     }
     setAnswers(data || []);
+  };
+
+  const fetchUsers = async () => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching users:", error);
+      toast({
+        title: "Error loading users",
+        description: error.message || "Failed to fetch users. Check RLS policies.",
+        variant: "destructive",
+      });
+      return;
+    }
+    console.log("Fetched users:", data);
+    setUsers(data || []);
+  };
+
+  const handleToggleAdmin = async (userId: string, currentAdminStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ is_admin: !currentAdminStatus })
+        .eq("id", userId);
+
+      if (error) throw error;
+
+      toast({
+        title: currentAdminStatus ? "Admin removed" : "Admin granted",
+        description: currentAdminStatus
+          ? "User no longer has admin privileges."
+          : "User now has admin privileges.",
+      });
+
+      fetchUsers();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update user.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDeleteQuestion = async (id: string) => {
@@ -204,6 +257,27 @@ const Admin = () => {
     return null;
   }
 
+  // Pagination logic
+  const activeQuestions = questions.filter(q => q.status !== 'deleted');
+  const activeAnswers = answers.filter(a => a.status !== 'deleted');
+
+  const questionsTotalPages = Math.ceil(activeQuestions.length / itemsPerPage);
+  const answersTotalPages = Math.ceil(activeAnswers.length / itemsPerPage);
+  const usersTotalPages = Math.ceil(users.length / itemsPerPage);
+
+  const paginatedQuestions = activeQuestions.slice(
+    (questionsPage - 1) * itemsPerPage,
+    questionsPage * itemsPerPage
+  );
+  const paginatedAnswers = activeAnswers.slice(
+    (answersPage - 1) * itemsPerPage,
+    answersPage * itemsPerPage
+  );
+  const paginatedUsers = users.slice(
+    (usersPage - 1) * itemsPerPage,
+    usersPage * itemsPerPage
+  );
+
   return (
     <Layout>
       <div className="container-page py-8 md:py-12">
@@ -216,7 +290,7 @@ const Admin = () => {
               Admin Dashboard
             </h1>
             <p className="text-muted-foreground">
-              Manage questions and answers
+              Manage questions, answers, and users
             </p>
           </div>
         </div>
@@ -224,15 +298,18 @@ const Admin = () => {
         <Tabs defaultValue="questions" className="w-full">
           <TabsList>
             <TabsTrigger value="questions">
-              Questions ({questions.filter(q => q.status !== 'deleted').length})
+              Questions ({activeQuestions.length})
             </TabsTrigger>
             <TabsTrigger value="answers">
-              Answers ({answers.filter(a => a.status !== 'deleted').length})
+              Answers ({activeAnswers.length})
+            </TabsTrigger>
+            <TabsTrigger value="users">
+              Users ({users.length})
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="questions" className="space-y-4 mt-6">
-            {questions.filter(q => q.status !== 'deleted').map((question) => (
+            {paginatedQuestions.map((question) => (
               <Card key={question.id}>
                 <CardHeader>
                   <div className="flex items-start justify-between gap-4">
@@ -284,17 +361,23 @@ const Admin = () => {
               </Card>
             ))}
 
-            {questions.filter(q => q.status !== 'deleted').length === 0 && (
+            {activeQuestions.length === 0 && (
               <Card>
                 <CardContent className="py-12 text-center text-muted-foreground">
                   No questions found
                 </CardContent>
               </Card>
             )}
+
+            <SimplePagination
+              currentPage={questionsPage}
+              totalPages={questionsTotalPages}
+              onPageChange={setQuestionsPage}
+            />
           </TabsContent>
 
           <TabsContent value="answers" className="space-y-4 mt-6">
-            {answers.filter(a => a.status !== 'deleted').map((answer) => {
+            {paginatedAnswers.map((answer) => {
               const question = questions.find(q => q.id === answer.question_id);
               return (
                 <Card key={answer.id}>
@@ -359,13 +442,93 @@ const Admin = () => {
               );
             })}
 
-            {answers.filter(a => a.status !== 'deleted').length === 0 && (
+            {activeAnswers.length === 0 && (
               <Card>
                 <CardContent className="py-12 text-center text-muted-foreground">
                   No answers found
                 </CardContent>
               </Card>
             )}
+
+            <SimplePagination
+              currentPage={answersPage}
+              totalPages={answersTotalPages}
+              onPageChange={setAnswersPage}
+            />
+          </TabsContent>
+
+          <TabsContent value="users" className="space-y-4 mt-6">
+            {paginatedUsers.map((userProfile) => {
+              const userQuestions = questions.filter(q => q.author_id === userProfile.id && q.status !== 'deleted');
+              const userAnswers = answers.filter(a => a.author_id === userProfile.id && a.status !== 'deleted');
+
+              return (
+                <Card key={userProfile.id}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Users className="h-5 w-5 text-primary" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg">{userProfile.username}</CardTitle>
+                            <p className="text-sm text-muted-foreground">{userProfile.email}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {userProfile.is_admin && (
+                            <Badge variant="verified" className="gap-1">
+                              <Shield className="h-3 w-3" />
+                              Admin
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        variant={userProfile.is_admin ? "destructive" : "default"}
+                        size="sm"
+                        onClick={() => handleToggleAdmin(userProfile.id, userProfile.is_admin)}
+                        disabled={userProfile.id === user?.id}
+                        title={userProfile.id === user?.id ? "Cannot modify your own admin status" : (userProfile.is_admin ? "Remove admin" : "Make admin")}
+                      >
+                        <Shield className="h-4 w-4 mr-2" />
+                        {userProfile.is_admin ? "Remove Admin" : "Make Admin"}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <MessageCircle className="h-4 w-4" />
+                        {userQuestions.length} questions
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Eye className="h-4 w-4" />
+                        {userAnswers.length} answers
+                      </span>
+                      <span>
+                        Joined {formatDistanceToNow(new Date(userProfile.created_at), { addSuffix: true })}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+
+            {users.length === 0 && (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  No users found
+                </CardContent>
+              </Card>
+            )}
+
+            <SimplePagination
+              currentPage={usersPage}
+              totalPages={usersTotalPages}
+              onPageChange={setUsersPage}
+            />
           </TabsContent>
         </Tabs>
 

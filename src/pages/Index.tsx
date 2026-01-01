@@ -3,6 +3,7 @@ import { QuestionCard } from "@/components/questions/QuestionCard";
 import { TopicChip } from "@/components/topics/TopicChip";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SimplePagination } from "@/components/ui/simple-pagination";
 import { topics } from "@/lib/mockData";
 import { Link } from "react-router-dom";
 import { Sparkles, TrendingUp, Clock } from "lucide-react";
@@ -12,6 +13,8 @@ import { supabase } from "@/lib/supabase";
 const Index = () => {
   const [questions, setQuestions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const questionsPerPage = 10;
 
   useEffect(() => {
     fetchQuestions();
@@ -66,6 +69,17 @@ const Index = () => {
   );
   const popularTopics = topics.slice(0, 10);
 
+  // Pagination
+  const totalPages = Math.ceil(trendingQuestions.length / questionsPerPage);
+  const paginatedTrendingQuestions = trendingQuestions.slice(
+    (currentPage - 1) * questionsPerPage,
+    currentPage * questionsPerPage
+  );
+  const paginatedNewestQuestions = newestQuestions.slice(
+    (currentPage - 1) * questionsPerPage,
+    currentPage * questionsPerPage
+  );
+
   return (
     <Layout>
       {/* Hero Section */}
@@ -115,15 +129,31 @@ const Index = () => {
               </div>
 
               <TabsContent value="trending" className="space-y-4">
-                {trendingQuestions.map((question) => (
+                {paginatedTrendingQuestions.map((question) => (
                   <QuestionCard key={question.id} question={question} />
                 ))}
+                <SimplePagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={(page) => {
+                    setCurrentPage(page);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
               </TabsContent>
 
               <TabsContent value="newest" className="space-y-4">
-                {newestQuestions.map((question) => (
+                {paginatedNewestQuestions.map((question) => (
                   <QuestionCard key={question.id} question={question} />
                 ))}
+                <SimplePagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={(page) => {
+                    setCurrentPage(page);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
               </TabsContent>
             </Tabs>
           </div>
