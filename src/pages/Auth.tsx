@@ -74,12 +74,16 @@ const Auth = () => {
     handleAuthActions();
   }, [searchParams, toast]);
 
-  // Redirect if already logged in
+  // Redirect if already logged in (but not if resetting password)
   useEffect(() => {
-    if (user) {
+    const tokenHash = searchParams.get('token_hash');
+    const type = searchParams.get('type');
+
+    // Don't redirect if user is resetting password
+    if (user && !isResettingPassword && !(tokenHash && type === 'recovery')) {
       navigate("/");
     }
-  }, [user, navigate]);
+  }, [user, navigate, isResettingPassword, searchParams]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
