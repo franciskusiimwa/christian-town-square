@@ -98,12 +98,42 @@ const AskQuestion = () => {
           ? username || "User"
           : guestName.trim() || "Guest";
 
+      // If user is authenticated, ensure their profile exists
+      if (user && !isAnonymous) {
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("id", user.id)
+          .single();
+
+        // If profile doesn't exist, create it
+        if (profileError || !profileData) {
+          console.log("Profile doesn't exist, creating one...");
+          const { error: createError } = await supabase
+            .from("profiles")
+            .insert({
+              id: user.id,
+              email: user.email,
+              username: username || user.email?.split("@")[0] || "User",
+            });
+
+          if (createError) {
+            console.error("Failed to create profile:", createError);
+            // If we can't create profile, post anonymously instead
+            toast({
+              title: "Posting as guest",
+              description: "We couldn't link this to your account, posting as guest instead.",
+            });
+          }
+        }
+      }
+
       const { data, error } = await supabase
         .from("questions")
         .insert({
           title: title.trim(),
           details: details.trim() || null,
-          author_id: user?.id || null,
+          author_id: (user && !isAnonymous) ? user.id : null,
           author_name: displayName,
           is_anonymous: isAnonymous,
           topics: selectedTopics,
@@ -120,6 +150,7 @@ const AskQuestion = () => {
 
       navigate(`/question/${data.id}`);
     } catch (error: any) {
+      console.error("Error submitting question:", error);
       toast({
         title: "Failed to submit question",
         description: error.message || "Please try again.",

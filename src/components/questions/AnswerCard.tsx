@@ -116,6 +116,35 @@ export function AnswerCard({ answer }: AnswerCardProps) {
     try {
       const displayName = user ? (username || "User") : (guestName.trim() || "Guest");
 
+      // If user is authenticated, ensure their profile exists
+      if (user) {
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("id", user.id)
+          .single();
+
+        // If profile doesn't exist, create it
+        if (profileError || !profileData) {
+          console.log("Profile doesn't exist, creating one...");
+          const { error: createError } = await supabase
+            .from("profiles")
+            .insert({
+              id: user.id,
+              email: user.email,
+              username: username || user.email?.split("@")[0] || "User",
+            });
+
+          if (createError) {
+            console.error("Failed to create profile:", createError);
+            toast({
+              title: "Posting as guest",
+              description: "We couldn't link this to your account, posting as guest instead.",
+            });
+          }
+        }
+      }
+
       const { error } = await supabase.from("replies").insert({
         answer_id: answer.id,
         author_id: user?.id || null,
@@ -136,6 +165,7 @@ export function AnswerCard({ answer }: AnswerCardProps) {
       setShowReplies(true);
       fetchReplies();
     } catch (error: any) {
+      console.error("Error posting reply:", error);
       toast({
         title: "Failed to post reply",
         description: error.message || "Please try again.",

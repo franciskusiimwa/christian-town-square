@@ -10,6 +10,8 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, username: string) => Promise<void>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -64,6 +66,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsAdmin(data?.is_admin ?? false);
   };
 
+  // Get the redirect URL dynamically (supports both localhost and production)
+  const getRedirectUrl = () => {
+    // Use environment variable if set, otherwise use current origin
+    const siteUrl = import.meta.env.VITE_SITE_URL;
+    return `${siteUrl}/auth`;
+  };
+
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -78,6 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email,
       password,
       options: {
+        emailRedirectTo: getRedirectUrl(),
         data: {
           username: username,
         },
@@ -93,6 +103,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: getRedirectUrl(),
+    });
+
+    if (error) throw error;
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) throw error;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -103,6 +129,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signUp,
         signOut,
+        resetPassword,
+        updatePassword,
       }}
     >
       {children}
